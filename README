@@ -1,0 +1,43 @@
+ReadMe for lipidwrap script – a wrapper for LipidR (https://www.lipidr.org/) 
+
+I.	Set up
+a.	Generate a new R script. Set working directory to folder containing the project
+b.	Source the lipidwrap script using source(“/path/to/lipidwrap/script.R”)
+c.	Organize your data. There should be 2 files for each lipidomics experiment
+i.	Data file: a csv file with first column lipid names. Each subsequent column represents one sample with sample name in row 1 and values for lipid species below
+ii.	Samples file: a keyfile with the following columns:
+1.	sample: sample names should match row 1 of data file
+2.	Group: main grouping variable. For FCG experiments, “Group” column should have the following categories: XX_ov, XX_test, XY_ov, XY_test
+3.	Any other grouping columns you’re interested in. FCG experiments should have columns “chromSex” and “gonSex”, which have values of XX and XY and O and T, respectively.
+II.	Preprocess lipidomics
+a.	Purpose: creates a LipidomicsExperiment object from data file and samples file.
+b.	Call the function using preprocess_lipidomics with the following arguments:
+i.	String experiment name – this will be used to name all of your files/plots and save them and MUST be unique for every experiment, or files will be overwritten 
+ii.	String raw data file name – ending in .csv
+iii.	String sample file name – ending in .csv
+iv.	Optional: method. This is the method for transforming the data. Default is log fold change, but if the original data has a lot of zeros, you’ll want to specify method = “boxcox” which applies a boxcox transformation 
+c.	preprocess_lipidomics will return a LipidomicsExperiment object (referred to as d in this readme)
+d.	Function will by default will eliminate any lipid species for which more than 1/3 of the samples are missing a value.  It will also use the 10 nearest neighbors for k nearest neighbors imputation of missing values. These parameters can be set using the percna and knn parameters, respectively. 
+III.	Optional intermediate step: subsetting
+a.	To access the lipid species information from the LipidomicsExperiment object, use rowData(d)
+b.	To access the sample information, use colData(d)
+c.	To subset either only some samples or some lipid species, standard R subsetting operations can be used. For example, the following will produce pc_lipids, a LipidomicsExperiment object with only lipids from the classes PC, PCO, and PCP.
+
+pc_lipids = rowData(d)$Class %in% c("PC", "PCO", "PCP")
+d_pc = d[pc_lipids,]
+
+
+IV.	Analyze lipidomics experiment
+a.	There are currently pre-written functions for analyzing common structures of data (like FCG) that explicitly do ALL analysis steps using pre-defined variables, like XX, XY, O and T for FCG. 
+b.	get_mva will do a PCA on d using d and an experiment name, saving a PNG of the PCA, and will return a data table with the raw data from the PCA
+c.	get_sup_mva will do OPLS-DA on d using d, an experiment name, and a “grouping” variable, which represents the variable upon which the OPLS-DA will be generated. For FCG, this is either “chromSex” or “gonSex”. This will save a PNG of the OPLS-DA plot and return a data table with raw data from the analysis.
+d.	de_analysis is performed for all pairwise comparisons of interest. It is called using the LipidomicsExperiment d plus whatever comparison you’re interested in. For example, to assay the gonadal effect in XX mice, use the following command: de_analysis(d, XX_ov - XX_test). You can also do de_analysis by grouping two or more primary groups from the Group column by calling de_analysis with the optional variable group_col and specifying it to be whatever group you’d like to compare. For example, use de_analysis(d, group_col="chromSex", XX - XY) to collapse O and T and instead just consider XX and XY genotypes, agnostic to gonadal sex. 
+e.	lipidset function will use a de_analysis return object (a dataframe) and the experiment name and will perform lipid set enrichment. A plot will be created showing the comparison and the difference in lipid class, chain length, and chain unsaturation. 
+f.	After all lipidset comparisons are complete, their results are aggregated together and saved as a csv ending with “_lsea_results.csv”
+g.	composite_volcano produces a volcano plot with a variable number of de_analysis volcano plots and can be called by passing in a list of de_analysis results along with the experiment name and an optional additional identifier that will be included in the title and filename of the PNG containing the plot.
+h.	Next, all de_analysis results should be concatenated together and saved as a single csv.
+i.	Finally, the analyze_ functions will create a lipidrResults object: a list of ALL of the raw data for a given analysis accessible by result type. This object is returned by the analyze_ functions and its components can later be used independently from the analyze_ functions. 
+V.	Notes:
+a.	The user can create new analyze_ functions based on their needs. Copy the format of the analyze_ functions at the top of the lipidwrap script. It is best to use descriptive variable names as these will be used to name the files produced by the script. For example, the analyze_fcg function uses variable names like chr_ov, which represents the chromosomal effect with ovaries background.
+b.	For analysis with only two groups instead of 4, refer to the structure of the analyze_kdm5c function. Basically, there are many fewer comparisons that can be made and the function is much simpler, but the outputs are all the same. 
+c.	All of the functions that are called in the analyze_ functions can be used individually and can have more specific parameters assigned when they’re called individually instead of as part of the analyze_ functions. For example, if you’re doing lipidset enrichment and want multiple plots representing different comparisons to have the same Y axis limits, you can specify the fold_change parameter to set the min and max Y axis values. For example, fold_change=4 will set the limits to -4 and 4. The default is NA and will be set automatically based on the min and max FC for that particular comparison.  
